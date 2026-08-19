@@ -23,10 +23,12 @@ use Illuminate\Support\Str;
  *
  * cGrate's Konik web service is SOAP (document/literal, WSDL at
  * /Konik/KonikWs?wsdl) secured with a WS-Security UsernameToken header. The
- * driver builds the envelopes itself and posts them over plain HTTP so the
- * calls stay testable and flow through the switch's provider call-logging —
- * no php-soap extension required. A merchant only configures their cGrate
- * account username and password in the dashboard.
+ * driver builds the envelopes itself and posts them with the SOAP content type
+ * the official Konik Postman collection uses, so calls stay testable and flow
+ * through the switch's provider call-logging — no php-soap extension required.
+ * A merchant configures only their cGrate base URL, username and password in
+ * the dashboard; TLS verification is disabled for the call because cGrate's
+ * endpoints are served with certificates the default trust store may reject.
  *
  * `processCustomerPayment` is synchronous: the payer confirms the USSD prompt
  * while the call is held open, so responseCode 0 means the payment COMPLETED
@@ -52,14 +54,15 @@ class CgrateController extends Controller implements PaymentProviderInterface
      * The credential fields the dashboard should collect for this driver.
      */
     public const CONFIG_FIELDS = [
+        ['key' => 'base_url', 'label' => 'Base URL', 'type' => 'text'],
         ['key' => 'username', 'label' => 'API Username', 'type' => 'text'],
         ['key' => 'password', 'label' => 'API Password', 'type' => 'password'],
     ];
 
     /**
-     * cGrate Konik production endpoint (we run providers in production only).
+     * The Konik service path appended to the configured base URL.
      */
-    private const BASE_URL = 'https://543.cgrate.co.zm/Konik/KonikWs';
+    private const KONIK_PATH = '/Konik/KonikWs';
 
     /**
      * The Konik service XML namespace (from the WSDL targetNamespace).
@@ -80,6 +83,8 @@ class CgrateController extends Controller implements PaymentProviderInterface
      */
     private const QUERY_LOOKUP_FAILURES = [105, 106];
 
+    private string $endpoint;
+
     private string $username;
 
     private string $password;
@@ -93,13 +98,15 @@ class CgrateController extends Controller implements PaymentProviderInterface
     {
         $config = is_string($provider->config) ? json_decode($provider->config, true) : $provider->config;
 
+        $baseUrl = $config['base_url'] ?? null;
         $username = $config['username'] ?? null;
         $password = $config['password'] ?? null;
 
-        if (! $username || ! $password) {
-            return ApiResponse::error('API Username and Password are required for the cGrate provider', 400);
+        if (! $baseUrl || ! $username || ! $password) {
+            return ApiResponse::error('Base URL, API Username and Password are required for the cGrate provider', 400);
         }
 
+        $this->endpoint = $this->buildEndpoint($baseUrl);
         $this->username = $username;
         $this->password = $password;
         $this->provider = $provider;
@@ -246,10 +253,31 @@ class CgrateController extends Controller implements PaymentProviderInterface
             .'</soapenv:Body>'
             .'</soapenv:Envelope>';
 
-        return Http::withHeaders([
-            'Content-Type' => 'text/xml; charset=utf-8',
-            'SOAPAction' => '""',
-        ])->withBody($envelope, 'text/xml')->post(self::BASE_URL);
+        // TLS verification is disabled (cGrate's endpoints often present a
+        // certificate the default trust store rejects) and the SOAP content
+        // type matches the official Konik Postman collection.
+        return Http::withoutVerifying()
+            ->withBody($envelope, 'application/soap+xml; charset=utf-8')
+            ->post($this->endpoint);
+    }
+
+    /**
+     * Build the full Konik endpoint from the configured base URL, tolerating a
+     * bare host, a trailing slash, a missing scheme, or the full service path.
+     */
+    private function buildEndpoint(string $baseUrl): string
+    {
+        $baseUrl = rtrim(trim($baseUrl), '/');
+
+        if (! preg_match('#^https?://#i', $baseUrl)) {
+            $baseUrl = 'https://'.$baseUrl;
+        }
+
+        if (! str_ends_with(strtolower($baseUrl), strtolower(self::KONIK_PATH))) {
+            $baseUrl .= self::KONIK_PATH;
+        }
+
+        return $baseUrl;
     }
 
     /**

@@ -198,17 +198,25 @@ markets you serve.
 The platform ships a **cGrate** driver (`CgrateController`) for mobile-money
 collections in Zambia through cGrate's **Konse Konse (543)** merchant service —
 covering MTN, Airtel, and Zamtel wallets. cGrate's Konik web service is
-**SOAP/WSDL** (`https://543.cgrate.co.zm/Konik/KonikWs?wsdl`) secured with a
-WS-Security UsernameToken, so you provide:
+**SOAP/WSDL** (`<base-url>/Konik/KonikWs`) secured with a WS-Security
+UsernameToken, so you provide:
 
 | Credential | Description |
 | --- | --- |
+| **Base URL** | Your cGrate host (e.g. `https://543.cgrate.co.zm`). The `/Konik/KonikWs` service path is appended automatically. |
 | **API Username** | Your cGrate account username (WS-Security UsernameToken). |
 | **API Password** | Your cGrate account password. |
 
-The driver builds the SOAP envelopes itself and posts them over HTTPS — no
-`php-soap` extension required — so cGrate calls appear in the provider call
-logs like every other gateway (with the password redacted).
+The driver builds the SOAP envelopes itself and posts them with the
+`application/soap+xml` content type the official Konik Postman collection uses —
+no `php-soap` extension required — so cGrate calls appear in the provider call
+logs like every other gateway (with the password redacted). TLS verification is
+disabled for these calls because cGrate's endpoints are commonly served with
+certificates the default trust store rejects.
+
+The two operations used are `processCustomerPayment` (request to pay —
+`transactionAmount`, `customerMobile`, `paymentReference`) and
+`queryCustomerPayment` (verification — by `paymentReference`).
 
 A distinctive behaviour to know: cGrate's `processCustomerPayment` is
 **synchronous** — the payer confirms the USSD prompt while the call is held
@@ -219,7 +227,8 @@ still processing (reported as `pending` — re-check it with the
 `queryCustomerPayment` result onto the final status).
 
 To enable it, add a provider in the dashboard, choose the **cGrate (Konse
-Konse 543)** driver, paste your username and password, and tick Zambia.
+Konse 543)** driver, enter your base URL, username and password, and tick
+Zambia.
 
 ## Built-in driver: Ting by Cellulant
 

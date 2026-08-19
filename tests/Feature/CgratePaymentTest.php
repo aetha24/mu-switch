@@ -15,7 +15,7 @@ function cgrateProvider(User $user): PaymentProvider
         'user_id' => $user->id,
         'name' => 'cGrate 543',
         'class' => CgrateController::class,
-        'config' => ['username' => 'mu-merchant', 'password' => 'cg-secret', 'supported_countries' => ['ZM']],
+        'config' => ['base_url' => 'https://test.543.cgrate.co.zm', 'username' => 'mu-merchant', 'password' => 'cg-secret', 'supported_countries' => ['ZM']],
         'is_active' => true,
     ]);
 }
@@ -57,7 +57,10 @@ test('the cgrate driver settles a synchronous payment as success', function () {
     Http::assertSent(function ($request) {
         $body = $request->body();
 
-        return str_contains($request->url(), '/Konik/KonikWs')
+        // Posts to the configured base URL + Konik path, with the SOAP content
+        // type from the official Postman collection.
+        return $request->url() === 'https://test.543.cgrate.co.zm/Konik/KonikWs'
+            && str_contains((string) $request->header('Content-Type')[0], 'application/soap+xml')
             && str_contains($body, '<kon:processCustomerPayment>')
             && str_contains($body, '<customerMobile>260977123456</customerMobile>')
             && str_contains($body, '<transactionAmount>50.00</transactionAmount>')

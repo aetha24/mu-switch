@@ -53,10 +53,18 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureHttpTimeouts(): void
     {
-        Http::globalOptions([
+        $options = [
             'connect_timeout' => 8,
             'timeout' => 0,
-        ]);
+        ];
+
+        if (env('HTTP_VERIFY_SSL') !== null) {
+            $options['verify'] = (bool) filter_var(env('HTTP_VERIFY_SSL'), FILTER_VALIDATE_BOOLEAN);
+        } elseif ($this->app->isLocal()) {
+            $options['verify'] = false;
+        }
+
+        Http::globalOptions($options);
     }
 
     /**

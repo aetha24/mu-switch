@@ -23,8 +23,7 @@ use Illuminate\Support\Facades\Http;
  * single secret API key passed as the `x-api-key` header — there is no token
  * exchange — so a merchant only configures their Lipila API key in the dashboard.
  *
- * @see https://docs.lipila.dev/docs/collections/momocollections.html
- * @see https://docs.lipila.dev/docs/collections/collection-status.html
+ * @see https://docs.lipila.io/docs/collections/momocollections.html
  */
 class LipilaController extends Controller implements PaymentProviderInterface
 {
@@ -47,6 +46,7 @@ class LipilaController extends Controller implements PaymentProviderInterface
      */
     public const CONFIG_FIELDS = [
         ['key' => 'api_key', 'label' => 'API Key', 'type' => 'password'],
+        ['key' => 'environment', 'label' => 'Environment', 'type' => 'select', 'options' => ['sandbox', 'production']],
     ];
 
     /**
@@ -60,9 +60,13 @@ class LipilaController extends Controller implements PaymentProviderInterface
     /**
      * Lipila production host.
      */
-    private const BASE_URL = 'https://blz.lipila.io';
+    private const SANDBOX_BASE_URL = 'https://api.lipila.dev';
+
+    private const PRODUCTION_BASE_URL = 'https://blz.lipila.io';
 
     private string $apiKey;
+
+    private string $baseUrl;
 
     public ?PaymentProvider $provider = null;
 
@@ -80,6 +84,10 @@ class LipilaController extends Controller implements PaymentProviderInterface
         }
 
         $this->apiKey = trim($apiKey);
+        $environment = strtolower(trim((string) ($config['environment'] ?? 'production')));
+        $this->baseUrl = $environment === 'sandbox'
+            ? self::SANDBOX_BASE_URL
+            : self::PRODUCTION_BASE_URL;
         $this->provider = $provider;
 
         return null;
@@ -132,7 +140,7 @@ class LipilaController extends Controller implements PaymentProviderInterface
 
         $response = Http::withHeaders($this->headers())
             ->asJson()
-            ->post(self::BASE_URL.'/api/v1/collections/mobile-money', $payload);
+            ->post($this->baseUrl.'/api/v1/collections/mobile-money', $payload);
 
         // Lipila accepts a collection with HTTP 200 and a non-failed status
         // ("Pending" while the payer authorises on their handset). Treat a
@@ -174,7 +182,7 @@ class LipilaController extends Controller implements PaymentProviderInterface
     public function verifyPayment(Transaction $transaction): JsonResponse
     {
         $response = Http::withHeaders($this->headers())
-            ->get(self::BASE_URL.'/api/v1/collections/check-status', [
+            ->get($this->baseUrl.'/api/v1/collections/check-status', [
                 'referenceId' => $transaction->transaction_id,
             ]);
 

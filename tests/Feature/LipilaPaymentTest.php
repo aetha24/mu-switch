@@ -87,6 +87,29 @@ test('the lipila driver forwards the payer email only when supplied', function (
         && $request['email'] === 'payer@example.com');
 });
 
+test('the lipila driver uses the sandbox host when configured for a test key', function () {
+    $user = User::factory()->create(['api_token' => 'lipila-sandbox']);
+    PaymentProvider::create([
+        'user_id' => $user->id,
+        'name' => 'Lipila sandbox',
+        'class' => LipilaController::class,
+        'config' => ['api_key' => 'test-secret', 'environment' => 'sandbox', 'supported_countries' => ['ZM']],
+        'is_active' => true,
+    ]);
+
+    Http::fake([
+        'https://api.lipila.dev/api/v1/collections/mobile-money' => Http::response([
+            'status' => 'Pending', 'identifier' => 'LPL-TEST-1',
+        ], 200),
+    ]);
+
+    $this->withToken('lipila-sandbox')
+        ->postJson('/api/v1/payment/request', ['amount' => 1, 'account_number' => '0977123456', 'country' => 'ZM'])
+        ->assertOk();
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://api.lipila.dev/api/v1/collections/mobile-money');
+});
+
 test('the lipila driver surfaces a declined collection as an error', function () {
     $user = User::factory()->create(['api_token' => 'lipila-token-2']);
     lipilaProvider($user);

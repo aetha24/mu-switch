@@ -9,7 +9,7 @@ if (config('app.docs_only_routes')) {
     return;
 }
 
-Route::prefix('v1')->middleware(VerifyApiAccess::class)->controller(SwitchController::class)->group(function () {
+Route::prefix('v1')->middleware([VerifyApiAccess::class, 'throttle:payment-api'])->controller(SwitchController::class)->group(function () {
     Route::prefix('payment')->group(function () {
         Route::post('/request', 'requestPayment');
         Route::post('/verify', 'verifyPayment');

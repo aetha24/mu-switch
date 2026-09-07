@@ -101,6 +101,26 @@ test('no callback is dispatched while the transaction is still pending', functio
     Queue::assertNotPushed(SendTransactionCallback::class);
 });
 
+test('a payment prompt older than two minutes expires without contacting its provider', function () {
+    Queue::fake();
+    Http::fake();
+
+    $user = User::factory()->create(['api_token' => 'tok']);
+    [, $transaction] = lencoTransaction($user, [
+        'created_at' => now()->subSeconds(121),
+        'updated_at' => now()->subSeconds(121),
+    ]);
+
+    $this->withToken('tok')
+        ->postJson('/api/v1/payment/verify', ['transaction_id' => $transaction->transaction_id])
+        ->assertOk()
+        ->assertJsonPath('status', 'failed')
+        ->assertJsonPath('data.provider_status', 'expired');
+
+    expect($transaction->fresh()->status)->toBe(TransactionStatus::FAILED);
+    Http::assertNothingSent();
+});
+
 test('an already-notified transaction is not notified again', function () {
     Queue::fake();
     Http::fake(['*/collections/status/*' => Http::response(['status' => true, 'data' => ['status' => 'successful']], 200)]);
@@ -184,4 +204,17 @@ test('an invalid callback url is rejected', function () {
             'country' => 'ZM',
             'callback_url' => 'not-a-url',
         ])->assertStatus(422);
+});
+
+test('a private or plain HTTP callback URL is rejected', function () {
+    $user = User::factory()->create(['api_token' => 'tok']);
+
+    $this->withToken('tok')
+        ->postJson('/api/v1/payment/request', [
+            'amount' => 10,
+            'account_number' => '0971000000',
+            'country' => 'ZM',
+            'callback_url' => 'http://127.0.0.1:8000/admin',
+        ])->assertStatus(422)
+        ->assertJsonValidationErrors('callback_url');
 });

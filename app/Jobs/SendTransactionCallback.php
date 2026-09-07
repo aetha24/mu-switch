@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Transaction;
+use App\Support\SafeCallbackUrl;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
@@ -38,7 +39,10 @@ class SendTransactionCallback implements ShouldQueue
      */
     public function handle(): void
     {
-        if (! $this->transaction->callback_url || $this->transaction->callback_notified_at || ! $this->transaction->isFinal()) {
+        if (! $this->transaction->callback_url
+            || ! SafeCallbackUrl::isAllowed($this->transaction->callback_url)
+            || $this->transaction->callback_notified_at
+            || ! $this->transaction->isFinal()) {
             return;
         }
 

@@ -115,16 +115,13 @@ const STATUS_STYLES: Record<
     },
 };
 
-function formatMoney(amount: number, currency: string): string {
-    try {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency,
-            maximumFractionDigits: amount >= 1000 ? 0 : 2,
-        }).format(amount);
-    } catch {
-        return `${currency} ${amount.toLocaleString()}`;
-    }
+function formatMoney(amount: number, _currency: string): string {
+    void _currency;
+
+    return `K${new Intl.NumberFormat('en-ZM', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(amount)}`;
 }
 
 function formatNumber(value: number): string {

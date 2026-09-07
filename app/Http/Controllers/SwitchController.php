@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\ApiResponse;
 use App\Contracts\PaymentProviderInterface;
+use App\Enums\TransactionStatus;
 use App\Jobs\SendTransactionCallback;
 use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Support\Market;
+use App\Support\PendingTransactionExpiry;
 use App\Support\ProviderCallContext;
 use App\Support\ProviderFees;
+use App\Support\SafeCallbackUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -26,7 +29,16 @@ class SwitchController extends Controller
             // Optional payer email — forwarded to providers that accept one.
             'email' => 'nullable|email',
             // Optional: where we POST the final (successful/failed) result.
-            'callback_url' => 'nullable|url',
+            'callback_url' => [
+                'nullable',
+                'url',
+                'max:2048',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value !== null && ! SafeCallbackUrl::isAllowed($value)) {
+                        $fail('The callback URL must be a public HTTPS address.');
+                    }
+                },
+            ],
         ]);
         $user = $request->user();
         $providers = $user ? $user->paymentProviders : collect();
@@ -191,6 +203,41 @@ class SwitchController extends Controller
         }
 
         $provider = $transaction->paymentProvider;
+
+        if (PendingTransactionExpiry::expire($transaction)) {
+            $transaction->refresh();
+
+            return ApiResponse::status(
+                TransactionStatus::FAILED->value,
+                'Payment prompt expired because it was not approved within two minutes',
+                [
+                    'transaction_id' => $transaction->transaction_id,
+                    'reference' => $transaction->provider_transaction_id,
+                    'status' => TransactionStatus::FAILED->value,
+                    'provider_status' => 'expired',
+                    'amount' => (float) $transaction->amount,
+                    'currency' => $transaction->currency,
+                ],
+            );
+        }
+
+        // A final decision is immutable. In particular, an expired prompt must
+        // never be queried again and accidentally turned into a later success.
+        if ($transaction->isFinal()) {
+            return ApiResponse::status(
+                $transaction->status->value,
+                $transaction->status === TransactionStatus::SUCCESS
+                    ? 'Payment already completed'
+                    : 'Payment already failed',
+                [
+                    'transaction_id' => $transaction->transaction_id,
+                    'reference' => $transaction->provider_transaction_id,
+                    'status' => $transaction->status->value,
+                    'amount' => (float) $transaction->amount,
+                    'currency' => $transaction->currency,
+                ],
+            );
+        }
 
         if (! $provider || ! class_exists($provider->class)) {
             return ApiResponse::error('The provider for this transaction is no longer available', 422);

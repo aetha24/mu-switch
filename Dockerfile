@@ -26,7 +26,8 @@ COPY --from=dependencies /var/www/html/vendor ./vendor
 COPY . .
 # Wayfinder boots Laravel while Vite builds. Give that build-only process an
 # isolated database and throwaway key; Render supplies the real values at run time.
-RUN touch /tmp/wayfinder.sqlite
+RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
+    && touch /tmp/wayfinder.sqlite
 ENV APP_ENV=production \
     APP_KEY=base64:QXNkZkdoSktMb3BXZXJ0WXVJb0FzRGZnSGprTG9wV2VyVA== \
     DB_CONNECTION=sqlite \

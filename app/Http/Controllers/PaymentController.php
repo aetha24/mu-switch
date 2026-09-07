@@ -8,6 +8,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -156,9 +157,13 @@ class PaymentController extends Controller
         $days = 14;
         $start = Carbon::now()->subDays($days - 1)->startOfDay();
 
+        $bucketExpr = DB::connection()->getDriverName() === 'pgsql'
+            ? "to_char(created_at, 'YYYY-MM-DD')"
+            : "strftime('%Y-%m-%d', created_at)";
+
         $rows = $query
             ->where('created_at', '>=', $start)
-            ->selectRaw("strftime('%Y-%m-%d', created_at) as bucket")
+            ->selectRaw("{$bucketExpr} as bucket")
             ->selectRaw('count(*) as total')
             ->selectRaw("coalesce(sum(case when status = 'success' then 1 else 0 end), 0) as success")
             ->selectRaw("coalesce(sum(case when status = 'pending' then 1 else 0 end), 0) as pending")

@@ -227,9 +227,9 @@ class LipilaController extends Controller implements PaymentProviderInterface
     }
 
     /**
-     * A unique reference accepted by Lipila and valid for our PostgreSQL UUID
-     * transaction_id column. The former 12-character hex value caused the
-     * local transaction save to fail before any request reached Lipila.
+     * A standards-compliant unique reference accepted by Lipila. UUIDs also
+     * remain compatible with switch databases created before transaction
+     * references were widened to support every provider's format.
      */
     private function newReference(): string
     {

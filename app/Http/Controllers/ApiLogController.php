@@ -8,6 +8,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -139,14 +140,19 @@ class ApiLogController extends Controller
 
         $like = '%'.$search.'%';
 
+        // PostgreSQL does not permit LIKE directly on json/jsonb columns;
+        // SQLite stores the same values as text. Cast only where necessary.
+        $requestBody = $this->jsonSearchExpression('request_body');
+        $requestHeaders = $this->jsonSearchExpression('request_headers');
+
         match ($field) {
             'path' => $query->where('url', 'like', $like),
             'ip' => $query->where('ip_address', 'like', $like),
             'method' => $query->where('method', strtoupper($search)),
             'status' => $query->where('response_status', (int) $search),
             'payload' => $query->where(fn (Builder $q) => $q
-                ->where('request_body', 'like', $like)
-                ->orWhere('request_headers', 'like', $like)
+                ->whereRaw("{$requestBody} LIKE ?", [$like])
+                ->orWhereRaw("{$requestHeaders} LIKE ?", [$like])
                 ->orWhere('response_body', 'like', $like)),
             'exception' => $query->where(fn (Builder $q) => $q
                 ->where('exception_class', 'like', $like)
@@ -156,8 +162,8 @@ class ApiLogController extends Controller
                 ->orWhere('ip_address', 'like', $like)
                 ->orWhere('method', 'like', $like)
                 ->orWhere('exception_message', 'like', $like)
-                ->orWhere('request_body', 'like', $like)
-                ->orWhere('request_headers', 'like', $like)
+                ->orWhereRaw("{$requestBody} LIKE ?", [$like])
+                ->orWhereRaw("{$requestHeaders} LIKE ?", [$like])
                 ->orWhere('response_body', 'like', $like)
                 ->when(is_numeric($search), fn (Builder $q2) => $q2->orWhere('response_status', (int) $search))),
         };
@@ -246,9 +252,7 @@ class ApiLogController extends Controller
      */
     private function chartSeries(Builder $query, Carbon $from, Carbon $to, string $grain): array
     {
-        $bucketExpr = $grain === 'hour'
-            ? "strftime('%Y-%m-%d %H:00:00', created_at)"
-            : "strftime('%Y-%m-%d', created_at)";
+        $bucketExpr = $this->bucketExpression($grain);
 
         $rows = $query
             ->selectRaw("{$bucketExpr} as bucket")
@@ -281,5 +285,32 @@ class ApiLogController extends Controller
         }
 
         return ['points' => $points, 'grain' => $grain];
+    }
+
+    /**
+     * SQLite and PostgreSQL expose different date-formatting functions. Render
+     * runs PostgreSQL, while the local/test database is SQLite.
+     */
+    private function bucketExpression(string $grain): string
+    {
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            return $grain === 'hour'
+                ? "to_char(created_at, 'YYYY-MM-DD HH24:00:00')"
+                : "to_char(created_at, 'YYYY-MM-DD')";
+        }
+
+        return $grain === 'hour'
+            ? "strftime('%Y-%m-%d %H:00:00', created_at)"
+            : "strftime('%Y-%m-%d', created_at)";
+    }
+
+    /**
+     * Return a safe JSON expression for text searching on the active database.
+     */
+    private function jsonSearchExpression(string $column): string
+    {
+        return DB::connection()->getDriverName() === 'pgsql'
+            ? "CAST({$column} AS TEXT)"
+            : $column;
     }
 }

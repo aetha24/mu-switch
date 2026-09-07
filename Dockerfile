@@ -5,14 +5,16 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress --no-scripts
 
-FROM node:24-bookworm-slim AS frontend
+FROM composer:2 AS frontend
 
 WORKDIR /app
 
+RUN apk add --no-cache nodejs npm
+
 COPY package.json package-lock.json ./
-RUN npm ci
+COPY --from=dependencies /app/vendor ./vendor
 COPY . .
-RUN npm run build
+RUN npm ci && npm run build
 
 FROM php:8.4-cli-bookworm
 

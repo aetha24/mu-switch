@@ -16,7 +16,10 @@ return new class extends Migration
     {
         Schema::create('transactions', function (Blueprint $table) {
             $table->id();
-            $table->uuid('transaction_id')->unique();
+            // Providers use their own reference formats. Some are UUIDs while
+            // others include a merchant prefix, so this must not be a UUID-only
+            // database field.
+            $table->string('transaction_id', 255)->unique();
             $table->foreignIdFor(PaymentProvider::class)->constrained()->onDelete('cascade');
             $table->string('provider_transaction_id', 255);
             $table->unique(['payment_provider_id', 'provider_transaction_id']);

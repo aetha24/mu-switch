@@ -7,6 +7,7 @@ use App\Models\PaymentProvider;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 function lipilaProvider(User $user): PaymentProvider
 {
@@ -48,6 +49,7 @@ test('the lipila driver initiates a mobile-money collection', function () {
         'country' => 'ZM',
         'status' => TransactionStatus::PENDING->value,
     ]);
+    expect(Str::isUuid(Transaction::firstOrFail()->transaction_id))->toBeTrue();
 
     // The required body params are all present and sent as JSON with the API key.
     // Email is optional, so it must NOT be sent when the caller omits it.

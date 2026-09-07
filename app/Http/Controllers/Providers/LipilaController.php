@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * Lipila driver — Mobile Money Collections.
@@ -226,11 +227,13 @@ class LipilaController extends Controller implements PaymentProviderInterface
     }
 
     /**
-     * A short, unique reference id (12 hex characters) in Lipila's format.
+     * A unique reference accepted by Lipila and valid for our PostgreSQL UUID
+     * transaction_id column. The former 12-character hex value caused the
+     * local transaction save to fail before any request reached Lipila.
      */
     private function newReference(): string
     {
-        return bin2hex(random_bytes(6));
+        return (string) Str::uuid();
     }
 
     /**

@@ -24,6 +24,16 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
 COPY package.json package-lock.json ./
 COPY --from=dependencies /var/www/html/vendor ./vendor
 COPY . .
+# Wayfinder boots Laravel while Vite builds. Give that build-only process an
+# isolated database and throwaway key; Render supplies the real values at run time.
+RUN touch /tmp/wayfinder.sqlite
+ENV APP_ENV=production \
+    APP_KEY=base64:QXNkZkdoSktMb3BXZXJ0WXVJb0FzRGZnSGprTG9wV2VyVA== \
+    DB_CONNECTION=sqlite \
+    DB_DATABASE=/tmp/wayfinder.sqlite \
+    CACHE_STORE=array \
+    SESSION_DRIVER=array \
+    QUEUE_CONNECTION=sync
 RUN npm ci && npm run build
 
 FROM php-base

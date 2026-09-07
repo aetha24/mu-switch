@@ -3,9 +3,9 @@ FROM php:8.4-cli-bookworm AS php-base
 WORKDIR /var/www/html
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl libpq-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev libzip-dev unzip \
+    && apt-get install -y --no-install-recommends ca-certificates curl libpq-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev libsqlite3-dev libzip-dev unzip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" bcmath gd pdo_pgsql pgsql zip \
+    && docker-php-ext-install -j"$(nproc)" bcmath gd pdo_pgsql pdo_sqlite pgsql sqlite3 zip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -34,7 +34,7 @@ ENV APP_ENV=production \
     CACHE_STORE=array \
     SESSION_DRIVER=array \
     QUEUE_CONNECTION=sync
-RUN npm ci && npm run build
+RUN php artisan wayfinder:generate --with-form && npm ci && npm run build
 
 FROM php-base
 
